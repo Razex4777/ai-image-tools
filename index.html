@@ -322,20 +322,17 @@
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        method: 'tools/call',
-                        params: {
-                            name: tool,
-                            arguments: params
-                        }
+                        tool: tool,
+                        params: params
                     })
                 });
                 
                 const data = await response.json();
                 
-                if (response.ok) {
-                    resultDiv.textContent = '✅ SUCCESS!\n\n' + JSON.stringify(data, null, 2);
+                if (response.ok && data.success) {
+                    resultDiv.textContent = '✅ SUCCESS!\n\n' + data.result;
                 } else {
-                    resultDiv.textContent = '❌ ERROR:\n\n' + JSON.stringify(data, null, 2);
+                    resultDiv.textContent = '❌ ERROR:\n\n' + (data.error || JSON.stringify(data, null, 2));
                 }
             } catch (error) {
                 resultDiv.textContent = '❌ ERROR:\n\n' + error.message;
