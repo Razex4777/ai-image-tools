@@ -1,6 +1,6 @@
 """
-Vercel Serverless Function - MCP Protocol + REST API Bridge
-Supports both MCP protocol (for mcp-remote) and simple REST API
+Vercel Serverless Function - Simple REST API
+Direct HTTP access to AI image tools
 """
 
 from http.server import BaseHTTPRequestHandler
@@ -145,19 +145,15 @@ class handler(BaseHTTPRequestHandler):
             self.wfile.write(json.dumps(error_response).encode())
     
     def do_POST(self):
-        """Handle both MCP protocol and REST API requests"""
+        """Handle REST API requests"""
         try:
             # Read request body
             content_length = int(self.headers.get('Content-Length', 0))
             body = self.rfile.read(content_length).decode('utf-8')
             data = json.loads(body)
             
-            # Check if this is MCP JSON-RPC request
-            if 'jsonrpc' in data:
-                self.handle_mcp_request(data)
-            else:
-                # Legacy REST API
-                self.handle_rest_request(data)
+            # Handle simple REST API
+            self.handle_rest_request(data)
                 
         except Exception as e:
             self.send_error_response(500, f'Error: {str(e)}')
