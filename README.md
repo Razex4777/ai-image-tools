@@ -14,8 +14,8 @@ Professional AI image generation tools powered by Google Gemini.
 ## 📦 Installation
 
 ```bash
-# Clone repository
-git clone https://github.com/yourusername/ai-image-tools.git
+# Clone repository (replace YOUR_USERNAME with your GitHub username)
+git clone https://github.com/YOUR_USERNAME/ai-image-tools.git
 cd ai-image-tools
 
 # Install dependencies

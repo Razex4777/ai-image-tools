@@ -1,5 +1,6 @@
 """
-Batch Icon Generator - Generate multiple icons at once
+Batch Icon Generator using Nano Banana Pro
+Generate multiple icons concurrently using Gemini 3 Pro Image
 """
 
 import os
@@ -47,11 +48,11 @@ async def batch_icon_generator(
         Summary report with success/failure count and file locations
     
     Features:
-        - Generates icons in parallel for speed
-        - Continues on individual failures
+        - Generates icons concurrently using asyncio.gather for speed
+        - Continues on individual failures (returns exceptions)
         - Auto-organizes output directory
         - Provides detailed summary report
-        - Smart filename sanitization
+        - Smart filename sanitization with index prefixing
     
     Examples:
         # Simple batch - same style for all
@@ -124,53 +125,78 @@ async def batch_icon_generator(
             "⏳ Processing..."
         ]
         
-        # Process each icon
+        # Build tasks for concurrent execution
+        tasks = []
+        job_metadata = []
+        
         for i, job in enumerate(jobs, 1):
             prompt = job["prompt"]
             job_style = job["style"]
             job_sizes = job["sizes"]
             
-            # Sanitize filename from prompt
+            # Sanitize filename from prompt with index prefix to prevent collisions
             safe_name = "".join(c for c in prompt.lower() if c.isalnum() or c in (' ', '-', '_'))
             safe_name = safe_name.replace(' ', '_')[:50]  # Limit length
             
-            # Build save path
-            save_path = os.path.join(output_dir, f"{safe_name}.svg")
+            # Add zero-padded index prefix
+            save_path = os.path.join(output_dir, f"{i:03d}_{safe_name}.svg")
             
-            try:
-                # Generate icon
-                result_parts.append(f"\n[{i}/{total}] Generating: {prompt}")
-                if job_style:
-                    result_parts.append(f"         Style: {job_style}")
-                
-                result = await icon_generator(
-                    prompt=prompt,
-                    style=job_style,
-                    sizes=job_sizes,
-                    save_path=save_path
-                )
-                
-                # Check if successful
-                if "🚨" not in result:
-                    successful.append({
-                        "prompt": prompt,
-                        "style": job_style,
-                        "path": save_path
-                    })
-                    result_parts.append(f"         ✅ Success")
-                else:
-                    failed.append({
-                        "prompt": prompt,
-                        "error": result
-                    })
-                    result_parts.append(f"         ❌ Failed")
-                    
-            except Exception as e:
+            # Log what we're generating
+            result_parts.append(f"\n[{i}/{total}] Queued: {prompt}")
+            if job_style:
+                result_parts.append(f"         Style: {job_style}")
+            
+            # Create coroutine and store metadata
+            task = icon_generator(
+                prompt=prompt,
+                style=job_style,
+                sizes=job_sizes,
+                save_path=save_path
+            )
+            tasks.append(task)
+            job_metadata.append({
+                "prompt": prompt,
+                "style": job_style,
+                "path": save_path,
+                "index": i
+            })
+        
+        result_parts.append("\n🚀 Generating all icons concurrently...\n")
+        
+        # Execute all tasks concurrently
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        
+        # Process results
+        for i, (result, metadata) in enumerate(zip(results, job_metadata)):
+            idx = metadata["index"]
+            prompt = metadata["prompt"]
+            save_path = metadata["path"]
+            job_style = metadata["style"]
+            
+            result_parts.append(f"[{idx}/{total}] Result for: {prompt}")
+            
+            if isinstance(result, Exception):
+                # Task raised an exception
                 failed.append({
                     "prompt": prompt,
-                    "error": str(e)
+                    "error": str(result)
                 })
-                result_parts.append(f"         ❌ Error: {str(e)[:100]}")
+                result_parts.append(f"         ❌ Error: {str(result)[:100]}")
+            elif "🚨" in str(result):
+                # Task returned error message
+                failed.append({
+                    "prompt": prompt,
+                    "error": result
+                })
+                result_parts.append(f"         ❌ Failed: {result[:100]}")
+            else:
+                # Success
+                successful.append({
+                    "prompt": prompt,
+                    "style": job_style,
+                    "path": save_path
+                })
+                result_parts.append(f"         ✅ Success")
         
         # Build summary report
         result_parts.extend([

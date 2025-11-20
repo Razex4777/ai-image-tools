@@ -22,8 +22,20 @@ if GOOGLE_API_KEY:
     client = genai.Client(api_key=GOOGLE_API_KEY)
 
 
-def _save_as_svg(image: Image.Image, save_path: str) -> None:
-    """Helper function to convert PIL Image to SVG with embedded PNG"""
+def _embed_png_as_svg(image: Image.Image, save_path: str) -> None:
+    """
+    ⚠️ IMPORTANT: This embeds a raster PNG inside an SVG wrapper, NOT true vector conversion.
+    
+    The resulting SVG contains a base64-encoded PNG image and does NOT provide:
+    - Infinite scalability (limited by the source PNG resolution)
+    - Vector editability (the image is still raster/pixel-based)
+    
+    For true vector conversion, use raster-to-vector tools like:
+    - potrace, autotrace, or online converters
+    
+    This function is useful for maintaining .svg file extension compatibility
+    while preserving the actual raster image data.
+    """
     width, height = image.size
     
     # Convert image to base64
@@ -94,10 +106,17 @@ async def nano_banana(
         save_path: Optional path to save the generated image(s).
                   If provided, images will be saved to this location.
                   Supports PNG and SVG formats (detected by extension).
+                  
+                  ⚠️ SVG output contains embedded PNG (raster), not true vectors:
+                  - "output.png" - Saves as PNG (recommended for raster images)
+                  - "output.svg" - Embeds PNG in SVG wrapper (NOT vector graphics)
+                  
+                  The .svg file will NOT be infinitely scalable or editable as vectors.
+                  For true vector conversion, export as PNG and use raster-to-vector tools.
+                  
                   Examples:
-                  - "output.png" - Saves as PNG (default)
-                  - "output.svg" - Automatically converts to SVG
-                  - "C:/Users/Desktop/generated_image.svg"
+                  - "C:/images/photo.png" - Standard PNG output
+                  - "C:/images/photo.svg" - PNG embedded in SVG container
     
     Returns:
         Success message with image details and save location, or error details
@@ -222,8 +241,8 @@ async def nano_banana(
                     else:
                         # No background removal, save directly
                         if wants_svg:
-                            # Convert PNG to SVG
-                            _save_as_svg(image, actual_save_path)
+                            # Embed PNG in SVG wrapper (not true vector conversion)
+                            _embed_png_as_svg(image, actual_save_path)
                             result_parts.append(f"💾 Image {image_count} saved as SVG: {actual_save_path}")
                         else:
                             # Save as PNG
@@ -335,18 +354,6 @@ async def nano_banana(
                             for temp_path, target_path, is_svg in temp_images:
                                 if temp_path == img_path:
                                     final_path = target_path
-                                    wants_svg_output = is_svg
-                                    break
-                            
-                            # Save to final path in requested format
-                            if wants_svg_output:
-                                _save_as_svg(transparent_img, final_path)
-                                result_parts.append(f"✨ Transparent image saved as SVG: {final_path}")
-                            else:
-                                transparent_img.save(final_path, "PNG")
-                                result_parts.append(f"✨ Transparent image saved to: {final_path}")
-                            
-                            transparent_paths.append(final_path)
                             
                             # Clean up temp file if it exists
                             if img_path != final_path and os.path.exists(img_path):

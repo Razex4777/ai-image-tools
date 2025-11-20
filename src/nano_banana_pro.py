@@ -94,7 +94,7 @@ async def nano_banana_pro(
                    - "1K" - Standard quality (faster)
                    - "2K" (default) - High quality (recommended)
                    - "4K" - Ultra high quality (professional assets)
-                   Note: Must use uppercase 'K' (lowercase will be rejected)
+                   Note: Requires SDK v1.49.0+ with ImageConfig.image_size support
         
         output_type: What to return in the response:
                     - "both" (default) - Returns both text description and image
@@ -132,7 +132,7 @@ async def nano_banana_pro(
         and save location, or error details
     
     Examples:
-        # Simple high-res text-to-image
+        # Simple text-to-image with Pro model
         nano_banana_pro(
             prompt="A professional tech conference poster with bold typography",
             resolution="4K"
@@ -187,10 +187,10 @@ async def nano_banana_pro(
         if aspect_ratio not in valid_ratios:
             return f"🚨 Error: Invalid aspect_ratio '{aspect_ratio}'. Must be one of {valid_ratios}"
         
-        # Validate resolution
+        # Validate resolution (supported since SDK v1.49.0)
         valid_resolutions = ["1K", "2K", "4K"]
         if resolution not in valid_resolutions:
-            return f"🚨 Error: Invalid resolution '{resolution}'. Must be one of {valid_resolutions} (uppercase K required)"
+            return f"🚨 Error: Invalid resolution '{resolution}'. Must be one of {valid_resolutions}"
         
         # Validate output type
         valid_output_types = ["both", "image_only"]
@@ -225,12 +225,11 @@ async def nano_banana_pro(
                 except Exception as e:
                     return f"🚨 Error loading image {img_path}: {str(e)}"
         
-        # Configure generation
-        # Note: image_size parameter not yet supported in current SDK version
-        # Only aspect_ratio is available in ImageConfig for now
+        # Configure generation (ImageConfig.image_size supported since SDK v1.49.0)
         config_params: Dict[str, Any] = {
             "image_config": types.ImageConfig(
                 aspect_ratio=aspect_ratio,
+                image_size=resolution,
             ),
             "response_modalities": ['IMAGE'] if output_type == "image_only" else ['TEXT', 'IMAGE']
         }
@@ -314,7 +313,7 @@ async def nano_banana_pro(
                             image.save(actual_save_path, "PNG")
                             result_parts.append(f"💾 Image {image_count} saved as PNG: {actual_save_path}")
                 else:
-                    result_parts.append(f"🖼️ Image {image_count} generated ({resolution} resolution)")
+                    result_parts.append(f"🖼️ Image {image_count} generated")
         
         # Apply background removal if requested using Freepik API
         if remove_background and saved_paths:
@@ -419,13 +418,12 @@ async def nano_banana_pro(
         response_lines = [
             "✅ Nano Banana Pro generation complete!",
             f"🎨 Model: Gemini 3 Pro Image Preview",
-            f"📐 Resolution: {resolution}",
+            f"📏 Resolution: {resolution}",
             f"📏 Aspect Ratio: {aspect_ratio}",
         ]
         
         if use_google_search:
             response_lines.append("🔍 Google Search: Enabled (real-time grounding)")
-        
         if show_thinking and thought_count > 0:
             response_lines.append(f"🧠 Thinking Steps: {thought_count} reasoning iterations")
         
