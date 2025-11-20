@@ -8,6 +8,10 @@
   ],
   "routes": [
     {
+      "src": "/",
+      "dest": "api/index.html"
+    },
+    {
       "src": "/api/mcp",
       "dest": "api/mcp.py"
     }
