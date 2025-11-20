@@ -4,16 +4,20 @@
     {
       "src": "api/mcp.py",
       "use": "@vercel/python"
+    },
+    {
+      "src": "index.html",
+      "use": "@vercel/static"
     }
   ],
   "routes": [
     {
-      "src": "/",
-      "dest": "api/index.html"
-    },
-    {
       "src": "/api/mcp",
       "dest": "api/mcp.py"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/index.html"
     }
   ]
 }
