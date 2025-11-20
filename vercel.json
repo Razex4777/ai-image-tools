@@ -15,9 +15,5 @@
       "src": "/api/mcp",
       "dest": "api/mcp.py"
     }
-  ],
-  "env": {
-    "GOOGLE_API_KEY": "@google_api_key",
-    "FREEPIK_API_KEY": "@freepik_api_key"
-  }
+  ]
 }
