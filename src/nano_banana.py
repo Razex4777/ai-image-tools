@@ -22,6 +22,28 @@ if GOOGLE_API_KEY:
     client = genai.Client(api_key=GOOGLE_API_KEY)
 
 
+def _save_as_svg(image: Image.Image, save_path: str) -> None:
+    """Helper function to convert PIL Image to SVG with embedded PNG"""
+    width, height = image.size
+    
+    # Convert image to base64
+    buffer = BytesIO()
+    image.save(buffer, format="PNG")
+    png_data = base64.b64encode(buffer.getvalue()).decode()
+    
+    # Create SVG with embedded PNG
+    svg_content = f'''<?xml version="1.0" encoding="UTF-8"?>
+<svg width="{width}" height="{height}" viewBox="0 0 {width} {height}" 
+     xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+    <image width="{width}" height="{height}" 
+           xlink:href="data:image/png;base64,{png_data}"/>
+</svg>'''
+    
+    # Save SVG file
+    with open(save_path, "w", encoding="utf-8") as f:
+        f.write(svg_content)
+
+
 async def nano_banana(
     prompt: str,
     reference_images: Optional[List[str]] = None,
@@ -71,7 +93,11 @@ async def nano_banana(
         
         save_path: Optional path to save the generated image(s).
                   If provided, images will be saved to this location.
-                  Example: "C:/Users/Desktop/generated_image.png"
+                  Supports PNG and SVG formats (detected by extension).
+                  Examples:
+                  - "output.png" - Saves as PNG (default)
+                  - "output.svg" - Automatically converts to SVG
+                  - "C:/Users/Desktop/generated_image.svg"
     
     Returns:
         Success message with image details and save location, or error details
@@ -135,9 +161,9 @@ async def nano_banana(
         
         # Configure generation
         config = types.GenerateContentConfig(
-            image_config=types.ImageConfig(
-                aspect_ratio=aspect_ratio,
-            ),
+            image_config={
+                "aspect_ratio": aspect_ratio,
+            },
             response_modalities=['Image'] if output_type == "image_only" else ['Text', 'Image']
         )
         
@@ -164,17 +190,25 @@ async def nano_banana(
                 image_count += 1
                 image = Image.open(BytesIO(part.inline_data.data))
                 
-                # Determine final save path
+                # Determine final save path and format
                 actual_save_path = None
+                wants_svg = False
                 if save_path:
+                    base, ext = os.path.splitext(save_path)
+                    wants_svg = ext.lower() == ".svg"
+                    
                     if image_count > 1:
                         # Multiple images: add number to filename
-                        base, ext = os.path.splitext(save_path)
-                        actual_save_path = f"{base}_{image_count}.png"
+                        if wants_svg:
+                            actual_save_path = f"{base}_{image_count}.svg"
+                        else:
+                            actual_save_path = f"{base}_{image_count}.png"
                     else:
-                        # Ensure PNG extension
-                        base, ext = os.path.splitext(save_path)
-                        actual_save_path = f"{base}.png"
+                        # Single image: use original extension
+                        if wants_svg:
+                            actual_save_path = f"{base}.svg"
+                        else:
+                            actual_save_path = f"{base}.png"
                     
                     if remove_background:
                         # If background removal requested, save to temp location first
@@ -182,13 +216,19 @@ async def nano_banana(
                         temp_fd, temp_path = tempfile.mkstemp(suffix=".png")
                         os.close(temp_fd)
                         image.save(temp_path, "PNG")
-                        temp_images.append((temp_path, actual_save_path))
+                        temp_images.append((temp_path, actual_save_path, wants_svg))
                         saved_paths.append(temp_path)
                         result_parts.append(f"🖼️ Image {image_count} generated (pending background removal)")
                     else:
-                        # No background removal, save directly to final path
-                        image.save(actual_save_path, "PNG")
-                        result_parts.append(f"💾 Image {image_count} saved to: {actual_save_path}")
+                        # No background removal, save directly
+                        if wants_svg:
+                            # Convert PNG to SVG
+                            _save_as_svg(image, actual_save_path)
+                            result_parts.append(f"💾 Image {image_count} saved as SVG: {actual_save_path}")
+                        else:
+                            # Save as PNG
+                            image.save(actual_save_path, "PNG")
+                            result_parts.append(f"💾 Image {image_count} saved to: {actual_save_path}")
                 else:
                     result_parts.append(f"🖼️ Image {image_count} generated successfully (size: {image.size})")
         
@@ -289,18 +329,24 @@ async def nano_banana(
                             # Download transparent image
                             transparent_img = Image.open(BytesIO(download_response.content))
                             
-                            # Find the final path for this temp file
+                            # Find the final path and format for this temp file
                             final_path = img_path
-                            for temp_path, target_path in temp_images:
+                            wants_svg_output = False
+                            for temp_path, target_path, is_svg in temp_images:
                                 if temp_path == img_path:
                                     final_path = target_path
+                                    wants_svg_output = is_svg
                                     break
                             
-                            # Save to final path
-                            transparent_img.save(final_path, "PNG")
-                            transparent_paths.append(final_path)
+                            # Save to final path in requested format
+                            if wants_svg_output:
+                                _save_as_svg(transparent_img, final_path)
+                                result_parts.append(f"✨ Transparent image saved as SVG: {final_path}")
+                            else:
+                                transparent_img.save(final_path, "PNG")
+                                result_parts.append(f"✨ Transparent image saved to: {final_path}")
                             
-                            result_parts.append(f"✨ Transparent image saved to: {final_path}")
+                            transparent_paths.append(final_path)
                             
                             # Clean up temp file if it exists
                             if img_path != final_path and os.path.exists(img_path):
