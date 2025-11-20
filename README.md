@@ -1,15 +1,59 @@
-# 🎨 AI Image Tools - MCP Server
+# 🎨 AI Image Tools - Public API & MCP Server
 
-Professional AI image generation tools powered by Google Gemini.
+Professional image generation API powered by Google Gemini. **Use it remotely or run locally!**
 
-## 🚀 Features
+## 🌐 Public API (Use Remotely)
 
-- **Nano Banana** - Fast image generation (Gemini 2.5 Flash)
-- **Nano Banana Pro** - Professional quality (Gemini 3 Pro, 4K, 14 refs)
-- **Icon Generator** - SVG icon generation with 40+ styles
-- **Batch Generator** - Process multiple icons at once
-- **SVG Converter** - Convert images to SVG/SVGZ
-- **Background Removal** - Freepik API integration for transparency
+**Anyone can use this API!** No installation required.
+
+### API Endpoint
+```bash
+POST https://ai-image-tools-rosy.vercel.app/api/mcp
+```
+
+### Example Usage
+
+```bash
+curl -X POST https://ai-image-tools-rosy.vercel.app/api/mcp \
+  -H "Content-Type: application/json" \
+  -d '{
+    "tool": "nano_banana_pro",
+    "params": {
+      "prompt": "A futuristic rocket ship",
+      "resolution": "2K",
+      "aspect_ratio": "1:1"
+    }
+  }'
+```
+
+```python
+import requests
+
+response = requests.post(
+    'https://ai-image-tools-rosy.vercel.app/api/mcp',
+    json={
+        'tool': 'icon_generator',
+        'params': {
+            'prompt': 'rocket',
+            'style': 'glassmorphism'
+        }
+    }
+)
+result = response.json()
+print(result['result'])
+```
+
+### 🛠️ Available Tools
+
+- **nano_banana** - Fast image generation (Gemini 2.5 Flash)
+- **nano_banana_pro** - Professional 4K (Gemini 3 Pro, up to 14 refs)
+- **icon_generator** - SVG icons with 50+ modern styles
+- **batch_icon_generator** - Generate multiple icons concurrently
+- **svg_converter** - Convert images to SVG/SVGZ
+
+## 🖥️ Local MCP Server
+
+Run locally for faster performance and private API keys.
 
 ## 📦 Installation
 

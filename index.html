@@ -258,22 +258,24 @@
         async function checkStatus() {
             try {
                 const response = await fetch('/api/mcp', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        method: 'tools/list'
-                    })
+                    method: 'GET'
                 });
                 
-                if (response.ok) {
+                const data = await response.json();
+                
+                if (response.ok && data.status === 'online') {
                     document.getElementById('server-status').textContent = 'Online';
                     document.getElementById('server-status').className = 'status online';
                     
-                    // If server is online, APIs are likely configured
-                    document.getElementById('gemini-status').textContent = 'Configured';
-                    document.getElementById('gemini-status').className = 'status online';
-                    document.getElementById('freepik-status').textContent = 'Configured';
-                    document.getElementById('freepik-status').className = 'status online';
+                    // Check if environment variables are configured
+                    const hasGemini = data.env && data.env.gemini;
+                    const hasFreepik = data.env && data.env.freepik;
+                    
+                    document.getElementById('gemini-status').textContent = hasGemini ? 'Configured' : 'Not Set';
+                    document.getElementById('gemini-status').className = hasGemini ? 'status online' : 'status offline';
+                    
+                    document.getElementById('freepik-status').textContent = hasFreepik ? 'Configured' : 'Not Set';
+                    document.getElementById('freepik-status').className = hasFreepik ? 'status online' : 'status offline';
                 } else {
                     throw new Error('Server offline');
                 }

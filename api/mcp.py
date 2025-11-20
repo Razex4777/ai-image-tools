@@ -58,12 +58,20 @@ class handler(BaseHTTPRequestHandler):
         self.send_header('Access-Control-Allow-Origin', '*')
         self.end_headers()
         
+        # Check if environment variables are configured
+        google_api_key = os.getenv('GOOGLE_API_KEY')
+        freepik_api_key = os.getenv('FREEPIK_API_KEY')
+        
         response = {
             'status': 'online',
             'service': 'AI Image Tools - Public API',
             'version': '1.0.0',
             'endpoint': '/api/mcp',
             'method': 'POST',
+            'env': {
+                'gemini': bool(google_api_key),
+                'freepik': bool(freepik_api_key)
+            },
             'tools': {name: {'description': info['description']} for name, info in TOOLS.items()},
             'usage': {
                 'url': 'https://ai-image-tools-rosy.vercel.app/api/mcp',
