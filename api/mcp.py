@@ -1,6 +1,6 @@
 """
-Vercel Serverless Function - Public MCP HTTP Bridge
-Allows anyone to use the AI Image Tools remotely via HTTP
+Vercel Serverless Function - MCP Protocol + REST API Bridge
+Supports both MCP protocol (for mcp-remote) and simple REST API
 """
 
 from http.server import BaseHTTPRequestHandler
@@ -8,6 +8,7 @@ import json
 import asyncio
 import sys
 import os
+from typing import Dict, Any, List
 
 # Add src to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
@@ -20,27 +21,65 @@ from src.batch_icon_generator import batch_icon_generator
 from src.svg_converter import svg_converter
 
 
-# Tool registry
+# Tool registry with MCP-compatible schemas
 TOOLS = {
     'nano_banana': {
         'function': nano_banana,
-        'description': 'Fast image generation with Gemini 2.5 Flash'
+        'description': 'Fast image generation with Gemini 2.5 Flash',
+        'inputSchema': {
+            'type': 'object',
+            'properties': {
+                'prompt': {'type': 'string', 'description': 'Image description'},
+                'aspect_ratio': {'type': 'string', 'enum': ['1:1', '16:9', '9:16', '4:3', '3:4']},
+                'remove_background': {'type': 'boolean'},
+            },
+            'required': ['prompt']
+        }
     },
     'nano_banana_pro': {
         'function': nano_banana_pro,
-        'description': 'Professional 4K image generation with Gemini 3 Pro'
+        'description': 'Professional 4K image generation with Gemini 3 Pro',
+        'inputSchema': {
+            'type': 'object',
+            'properties': {
+                'prompt': {'type': 'string'},
+                'resolution': {'type': 'string', 'enum': ['1K', '2K', '4K']},
+                'aspect_ratio': {'type': 'string'},
+            },
+            'required': ['prompt']
+        }
     },
     'icon_generator': {
         'function': icon_generator,
-        'description': 'Generate SVG icons with 50+ modern styles'
+        'description': 'Generate SVG icons with 50+ modern styles',
+        'inputSchema': {
+            'type': 'object',
+            'properties': {
+                'prompt': {'type': 'string'},
+                'style': {'type': 'string'},
+            },
+            'required': ['prompt']
+        }
     },
     'batch_icon_generator': {
         'function': batch_icon_generator,
-        'description': 'Generate multiple icons concurrently'
+        'description': 'Generate multiple icons concurrently',
+        'inputSchema': {
+            'type': 'object',
+            'properties': {
+                'prompts': {'type': 'array'},
+            }
+        }
     },
     'svg_converter': {
         'function': svg_converter,
-        'description': 'Convert images to SVG/SVGZ format'
+        'description': 'Convert images to SVG/SVGZ format',
+        'inputSchema': {
+            'type': 'object',
+            'properties': {
+                'input_path': {'type': 'string'},
+            }
+        }
     }
 }
 
@@ -88,49 +127,151 @@ class handler(BaseHTTPRequestHandler):
         self.wfile.write(json.dumps(response, indent=2).encode())
     
     def do_POST(self):
-        """Handle tool execution requests"""
+        """Handle both MCP protocol and REST API requests"""
         try:
             # Read request body
             content_length = int(self.headers.get('Content-Length', 0))
             body = self.rfile.read(content_length).decode('utf-8')
             data = json.loads(body)
             
-            # Extract tool name and parameters
-            tool_name = data.get('tool')
-            params = data.get('params', {})
+            # Check if this is MCP JSON-RPC request
+            if 'jsonrpc' in data:
+                self.handle_mcp_request(data)
+            else:
+                # Legacy REST API
+                self.handle_rest_request(data)
+                
+        except Exception as e:
+            self.send_error_response(500, f'Error: {str(e)}')
+    
+    def handle_mcp_request(self, data: Dict[str, Any]):
+        """Handle MCP JSON-RPC protocol requests"""
+        method = data.get('method')
+        request_id = data.get('id')
+        params = data.get('params', {})
+        
+        try:
+            if method == 'initialize':
+                # MCP initialize handshake
+                response = {
+                    'jsonrpc': '2.0',
+                    'id': request_id,
+                    'result': {
+                        'protocolVersion': '2024-11-05',
+                        'capabilities': {
+                            'tools': {}
+                        },
+                        'serverInfo': {
+                            'name': 'ai-image-tools',
+                            'version': '1.0.0'
+                        }
+                    }
+                }
             
-            if not tool_name:
-                self.send_error_response(400, 'Missing "tool" field in request')
-                return
+            elif method == 'tools/list':
+                # Return available tools in MCP format
+                tools_list = []
+                for name, info in TOOLS.items():
+                    tools_list.append({
+                        'name': name,
+                        'description': info['description'],
+                        'inputSchema': info.get('inputSchema', {})
+                    })
+                
+                response = {
+                    'jsonrpc': '2.0',
+                    'id': request_id,
+                    'result': {
+                        'tools': tools_list
+                    }
+                }
             
-            if tool_name not in TOOLS:
-                self.send_error_response(404, f'Unknown tool: {tool_name}. Available: {list(TOOLS.keys())}')
-                return
+            elif method == 'tools/call':
+                # Execute tool
+                tool_name = params.get('name')
+                tool_args = params.get('arguments', {})
+                
+                if tool_name not in TOOLS:
+                    raise ValueError(f'Unknown tool: {tool_name}')
+                
+                # Execute tool
+                tool_function = TOOLS[tool_name]['function']
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                result = loop.run_until_complete(tool_function(**tool_args))
+                loop.close()
+                
+                response = {
+                    'jsonrpc': '2.0',
+                    'id': request_id,
+                    'result': {
+                        'content': [
+                            {
+                                'type': 'text',
+                                'text': result
+                            }
+                        ]
+                    }
+                }
             
-            # Execute tool asynchronously
-            tool_function = TOOLS[tool_name]['function']
+            else:
+                raise ValueError(f'Unknown method: {method}')
             
-            # Run async function in event loop
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            result = loop.run_until_complete(tool_function(**params))
-            loop.close()
-            
-            # Send success response
+            # Send MCP response
             self.send_response(200)
             self.send_header('Content-Type', 'application/json')
             self.send_header('Access-Control-Allow-Origin', '*')
             self.end_headers()
-            
-            response = {
-                'success': True,
-                'tool': tool_name,
-                'result': result
-            }
             self.wfile.write(json.dumps(response).encode())
             
         except Exception as e:
-            self.send_error_response(500, f'Error executing tool: {str(e)}')
+            # MCP error response
+            error_response = {
+                'jsonrpc': '2.0',
+                'id': request_id,
+                'error': {
+                    'code': -32603,
+                    'message': str(e)
+                }
+            }
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.send_header('Access-Control-Allow-Origin', '*')
+            self.end_headers()
+            self.wfile.write(json.dumps(error_response).encode())
+    
+    def handle_rest_request(self, data: Dict[str, Any]):
+        """Handle simple REST API requests (legacy)"""
+        tool_name = data.get('tool')
+        params = data.get('params', {})
+        
+        if not tool_name:
+            self.send_error_response(400, 'Missing "tool" field')
+            return
+        
+        if tool_name not in TOOLS:
+            self.send_error_response(404, f'Unknown tool: {tool_name}')
+            return
+        
+        # Execute tool
+        tool_function = TOOLS[tool_name]['function']
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        result = loop.run_until_complete(tool_function(**params))
+        loop.close()
+        
+        # Send REST response
+        self.send_response(200)
+        self.send_header('Content-Type', 'application/json')
+        self.send_header('Access-Control-Allow-Origin', '*')
+        self.end_headers()
+        
+        response = {
+            'success': True,
+            'tool': tool_name,
+            'result': result
+        }
+        self.wfile.write(json.dumps(response).encode())
     
     def send_error_response(self, code, message):
         """Send error response"""
