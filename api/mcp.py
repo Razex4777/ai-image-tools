@@ -92,39 +92,57 @@ class handler(BaseHTTPRequestHandler):
     
     def do_GET(self):
         """Return available tools and status"""
-        self.send_response(200)
-        self.send_header('Content-Type', 'application/json')
-        self.send_header('Access-Control-Allow-Origin', '*')
-        self.end_headers()
-        
-        # Check if environment variables are configured
-        google_api_key = os.getenv('GOOGLE_API_KEY')
-        freepik_api_key = os.getenv('FREEPIK_API_KEY')
-        
-        response = {
-            'status': 'online',
-            'service': 'AI Image Tools - Public API',
-            'version': '1.0.0',
-            'endpoint': '/api/mcp',
-            'method': 'POST',
-            'env': {
-                'gemini': bool(google_api_key),
-                'freepik': bool(freepik_api_key)
-            },
-            'tools': {name: {'description': info['description']} for name, info in TOOLS.items()},
-            'usage': {
-                'url': 'https://ai-image-tools-rosy.vercel.app/api/mcp',
-                'example': {
-                    'tool': 'nano_banana_pro',
-                    'params': {
-                        'prompt': 'A beautiful sunset over mountains',
-                        'resolution': '2K',
-                        'aspect_ratio': '16:9'
+        try:
+            # Check if environment variables are configured
+            google_api_key = os.getenv('GOOGLE_API_KEY')
+            freepik_api_key = os.getenv('FREEPIK_API_KEY')
+            
+            response = {
+                'status': 'online',
+                'service': 'AI Image Tools - Public API',
+                'version': '1.0.0',
+                'endpoint': '/api/mcp',
+                'method': 'POST',
+                'env': {
+                    'gemini': bool(google_api_key),
+                    'freepik': bool(freepik_api_key)
+                },
+                'tools': {name: {'description': info['description']} for name, info in TOOLS.items()},
+                'usage': {
+                    'url': 'https://ai-image-tools-rosy.vercel.app/api/mcp',
+                    'example': {
+                        'tool': 'nano_banana_pro',
+                        'params': {
+                            'prompt': 'A beautiful sunset over mountains',
+                            'resolution': '2K',
+                            'aspect_ratio': '16:9'
+                        }
                     }
                 }
             }
-        }
-        self.wfile.write(json.dumps(response, indent=2).encode())
+            
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.send_header('Access-Control-Allow-Origin', '*')
+            self.end_headers()
+            self.wfile.write(json.dumps(response, indent=2).encode())
+            
+        except Exception as e:
+            # Always return valid JSON even on error
+            self.send_response(500)
+            self.send_header('Content-Type', 'application/json')
+            self.send_header('Access-Control-Allow-Origin', '*')
+            self.end_headers()
+            
+            error_response = {
+                'status': 'error',
+                'error': str(e),
+                'env': {
+                    'gemini': False,
+                    'freepik': False
+                }
+            }
+            self.wfile.write(json.dumps(error_response).encode())
     
     def do_POST(self):
         """Handle both MCP protocol and REST API requests"""
